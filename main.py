@@ -56,10 +56,11 @@ def cmd_review(args, config):
 
     pgn_path = Path(args.pgn) if args.pgn else None
     study_url = args.lichess_study or None
+    export_id = args.export_study or None
     out_path = Path(args.output) if args.output else None
 
-    if pgn_path is None and study_url is None:
-        print("Error: provide --pgn or --lichess-study", file=sys.stderr)
+    if pgn_path is None and study_url is None and export_id is None:
+        print("Error: provide --pgn, --lichess-study, or --export-study", file=sys.stderr)
         sys.exit(1)
 
     # Derive a study name from the PGN filename or study URL
@@ -74,6 +75,8 @@ def cmd_review(args, config):
         lichess_study_url=study_url,
         study_name=study_name,
         output_path=out_path,
+        export_only_id=export_id,
+        orientation=getattr(args, "orientation", None),
     )
 
 
@@ -113,9 +116,12 @@ def cmd_run(args, config):
 
     # Stage 2
     study_name = pgn_path.stem.replace("_", " ")
-    curated_path = stage2(token=token, pgn_path=pgn_path, study_name=study_name)
+    orientation = getattr(args, "orientation", None)
+    curated_path = stage2(token=token, pgn_path=pgn_path, study_name=study_name, orientation=orientation)
 
-    # Stage 3
+    # Stage 3 — orientation → piece_color (white/black → White/Black)
+    if orientation:
+        piece_color = orientation.capitalize()
     course_name = pgn_path.stem.replace("_", " ")
     stage3(
         username=username,
@@ -141,6 +147,7 @@ def build_parser() -> argparse.ArgumentParser:
     # run
     p_run = sub.add_parser("run", help="Full pipeline: YouTube → Chessable")
     p_run.add_argument("url", help="YouTube video URL")
+    p_run.add_argument("--orientation", choices=["white", "black"], help="Board orientation (white or black)")
 
     # fetch
     p_fetch = sub.add_parser("fetch", help="Stage 1: YouTube → PGN file")
@@ -151,6 +158,8 @@ def build_parser() -> argparse.ArgumentParser:
     p_review = sub.add_parser("review", help="Stage 2: PGN / Lichess study → curated PGN")
     p_review.add_argument("--pgn", help="Input PGN file to import into a new Lichess study")
     p_review.add_argument("--lichess-study", metavar="URL", help="Existing Lichess study URL to use as-is")
+    p_review.add_argument("--export-study", metavar="STUDY_ID", help="Export & post-process an existing study (skip import)")
+    p_review.add_argument("--orientation", choices=["white", "black"], help="Board orientation for all chapters (white or black)")
     p_review.add_argument("--output", "-o", help="Output curated PGN file path")
 
     # import

@@ -34,7 +34,15 @@ def create_study(token: str, name: str) -> str:
     resp = requests.post(
         f"{LICHESS_API}/study",
         headers=_headers(token),
-        json={"name": name, "visibility": "private"},
+        json={
+            "name": name,
+            "visibility": "unlisted",
+            "explorer": "nobody",
+            "computer": "nobody",
+            "chat": "nobody",
+            "shareable": "nobody",
+            "cloneable": "nobody",
+        },
         timeout=15,
     )
     if resp.status_code != 200:
@@ -45,12 +53,21 @@ def create_study(token: str, name: str) -> str:
     return study_id
 
 
-def import_pgn_to_study(token: str, study_id: str, pgn_text: str, chapter_name: str = "Lines") -> None:
+def prompt_orientation() -> str:
+    """Ask the user which side the opening is for. Returns 'white' or 'black'."""
+    print("\n[Stage 2] Which side is this opening for?")
+    print("  [w] White")
+    print("  [b] Black")
+    choice = input("  Choice [w/b]: ").strip().lower()
+    return "black" if choice == "b" else "white"
+
+
+def import_pgn_to_study(token: str, study_id: str, pgn_text: str, chapter_name: str = "Lines", orientation: str = "white") -> None:
     """Import a PGN string as a chapter into an existing study."""
     resp = requests.post(
         f"{LICHESS_API}/study/{study_id}/import-pgn",
         headers={**_headers(token), "Content-Type": "application/x-www-form-urlencoded"},
-        data={"pgn": pgn_text, "name": chapter_name},
+        data={"pgn": pgn_text, "name": chapter_name, "orientation": orientation},
         timeout=30,
     )
     if resp.status_code not in (200, 201):
@@ -63,9 +80,17 @@ def export_study_pgn(token: str, study_id: str) -> str:
     """Export the full study as a PGN string via the Lichess API."""
     resp = requests.get(
         f"{LICHESS_API}/study/{study_id}.pgn",
-        headers={**_headers(token), "Accept": "application/x-chess-pgn"},
+        headers={"Authorization": f"Bearer {token}"},
         timeout=30,
     )
+    if resp.status_code == 403:
+        print(
+            f"[Stage 2] Export failed — study is private.\n"
+            f"  In Lichess: open the study → gear icon → set Visibility to 'Unlisted' → save.\n"
+            f"  New studies created by this tool are already set to Unlisted.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
     if resp.status_code != 200:
         print(f"[Stage 2] Export failed: {resp.status_code} {resp.text}", file=sys.stderr)
         sys.exit(1)
@@ -78,12 +103,44 @@ def study_id_from_url(url: str) -> str | None:
     return match.group(1) if match else None
 
 
+def export_and_process(
+    token: str,
+    study_id: str,
+    study_name: str = "YouTube Chess Lines",
+    output_path: Path | None = None,
+) -> Path:
+    """
+    Export an existing Lichess study and post-process it (map ! → {[%key]}).
+    Use this after you've finished curating in the browser.
+    """
+    OUTPUT_DIR.mkdir(exist_ok=True)
+    print(f"[Stage 2] Exporting study {study_id}…")
+    exported_pgn = export_study_pgn(token, study_id)
+    curated_pgn = map_annotations_to_key_moves(exported_pgn)
+
+    games, errors = validate_pgn(curated_pgn)
+    if errors:
+        print(f"  Warning: {len(errors)} validation issue(s) in exported PGN:")
+        for err in errors:
+            print(f"    - {err}")
+
+    if output_path is None:
+        safe_name = re.sub(r'[^\w\s-]', '', study_name).strip().replace(' ', '_')[:60]
+        output_path = OUTPUT_DIR / f"{safe_name}_curated.pgn"
+
+    output_path.write_text(curated_pgn)
+    print(f"\n[Stage 2] Done. Curated PGN written to {output_path}")
+    return output_path
+
+
 def run(
     token: str,
     pgn_path: Path | None = None,
     lichess_study_url: str | None = None,
     study_name: str = "YouTube Chess Lines",
     output_path: Path | None = None,
+    export_only_id: str | None = None,
+    orientation: str | None = None,
 ) -> Path:
     """
     Full Stage 2 run.  Supply either pgn_path (creates a new study) or
@@ -91,6 +148,10 @@ def run(
     Returns path to the curated output PGN file.
     """
     OUTPUT_DIR.mkdir(exist_ok=True)
+
+    # Skip straight to export if caller already has a study ID
+    if export_only_id:
+        return export_and_process(token, export_only_id, study_name, output_path)
 
     if lichess_study_url:
         # Use existing study — skip creation and import
@@ -106,6 +167,10 @@ def run(
             sys.exit(1)
 
         pgn_text = pgn_path.read_text()
+
+        if orientation is None:
+            orientation = prompt_orientation()
+
         study_id = create_study(token, study_name)
 
         # Split multi-game PGN into chapters (one chapter per game)
@@ -122,7 +187,7 @@ def run(
                 chapter_name = f"{white.group(1)} vs {black.group(1)}"
             else:
                 chapter_name = f"Line {i}"
-            import_pgn_to_study(token, study_id, chapter_pgn, chapter_name)
+            import_pgn_to_study(token, study_id, chapter_pgn, chapter_name, orientation)
 
         study_url = f"https://lichess.org/study/{study_id}"
 

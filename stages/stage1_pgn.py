@@ -162,6 +162,9 @@ def run(youtube_url: str, output_path: Path | None = None) -> Path:
                     else:
                         print(f"    Still invalid after edit — skipping. Errors: {errors2}")
 
+    # Drop games with no moves (empty chapters)
+    all_games = [g for g in all_games if g.next() is not None]
+
     if not all_games:
         print(
             "\n[Stage 1] No valid PGN found in the video description.\n"
