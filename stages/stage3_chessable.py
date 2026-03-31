@@ -207,8 +207,6 @@ def run_auto(
     course_id: int | None = None,
 ) -> None:
     """Full Playwright automation — creates course, chapters, imports PGN."""
-    import chess.pgn
-    import io
     from playwright.sync_api import sync_playwright
 
     pgn_text = pgn_path.read_text()
@@ -225,12 +223,10 @@ def run_auto(
         else:
             book_id = _create_course(page, course_name, piece_color, course_type)
 
-        # Parse games and group by White player name (chapter = group of games)
-        stream = io.StringIO(pgn_text)
+        # Group games by White player name → one chapter per unique name
         chapters: dict[str, list[str]] = {}
-        games_raw: list[str] = []
 
-        # Re-split raw PGN into per-game strings
+        # Split raw PGN into per-game strings
         raw_blocks = re.split(r'\n\n(?=\[Event)', pgn_text.strip())
         for block in raw_blocks:
             block = block.strip()

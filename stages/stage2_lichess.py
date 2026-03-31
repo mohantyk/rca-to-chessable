@@ -40,7 +40,7 @@ def create_study(token: str, name: str) -> str:
             "explorer": "nobody",
             "computer": "nobody",
             "chat": "nobody",
-            "shareable": "nobody",
+            "shareable": "member",
             "cloneable": "nobody",
         },
         timeout=15,
