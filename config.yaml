@@ -1,0 +1,4 @@
+# Tunable parameters for youtube-chessable
+gap_threshold: 3          # Max unfilled transcript gaps before triggering CV fallback
+cv_fallback_enabled: false # Phase 3 feature flag
+default_piece_color: White  # White | Black | Both
