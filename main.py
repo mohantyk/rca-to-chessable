@@ -83,21 +83,24 @@ def cmd_review(args, config):
 def cmd_import(args, config):
     """Stage 3: curated PGN → Chessable course."""
     from stages.stage3_chessable import run as stage3
-    username = require_env("CHESSABLE_USERNAME")
-    password = require_env("CHESSABLE_PASSWORD")
     piece_color = config.get("default_piece_color", "White")
-
     pgn_path = Path(args.pgn)
     course_name = pgn_path.stem.replace("_curated", "").replace("_", " ")
+    manual = not getattr(args, "auto", False)
 
-    stage3(
-        username=username,
-        password=password,
-        pgn_path=pgn_path,
-        course_id=args.course_id or None,
-        course_name=course_name,
-        piece_color=piece_color,
-    )
+    if manual:
+        stage3(pgn_path=pgn_path, manual=True)
+    else:
+        email = require_env("CHESSABLE_EMAIL")
+        password = require_env("CHESSABLE_PASSWORD")
+        stage3(
+            pgn_path=pgn_path,
+            manual=False,
+            email=email,
+            password=password,
+            course_name=course_name,
+            piece_color=piece_color,
+        )
 
 
 def cmd_run(args, config):
@@ -107,7 +110,7 @@ def cmd_run(args, config):
     from stages.stage3_chessable import run as stage3
 
     token = require_env("LICHESS_TOKEN")
-    username = require_env("CHESSABLE_USERNAME")
+    email = require_env("CHESSABLE_EMAIL")
     password = require_env("CHESSABLE_PASSWORD")
     piece_color = config.get("default_piece_color", "White")
 
@@ -124,7 +127,7 @@ def cmd_run(args, config):
         piece_color = orientation.capitalize()
     course_name = pgn_path.stem.replace("_", " ")
     stage3(
-        username=username,
+        email=email,
         password=password,
         pgn_path=curated_path,
         course_name=course_name,
@@ -165,6 +168,7 @@ def build_parser() -> argparse.ArgumentParser:
     # import
     p_import = sub.add_parser("import", help="Stage 3: curated PGN → Chessable course")
     p_import.add_argument("--pgn", required=True, help="Curated PGN file to import")
+    p_import.add_argument("--auto", action="store_true", help="Use Selenium automation (default: manual mode)")
     p_import.add_argument("--course-id", help="Existing Chessable course ID to append to")
 
     return parser
