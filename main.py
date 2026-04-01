@@ -84,7 +84,8 @@ def cmd_review(args, config):
 def cmd_import(args, config):
     """Stage 3: curated PGN → Chessable course."""
     from stages.stage3_chessable import run as stage3
-    piece_color = config.get("default_piece_color", "White")
+    orientation = getattr(args, "orientation", None)
+    piece_color = orientation.capitalize() if orientation else config.get("default_piece_color", "White")
     pgn_path = Path(args.pgn)
     manual = not getattr(args, "auto", False)
 
@@ -108,15 +109,15 @@ def cmd_import(args, config):
     chapter_name = new_chapter_name or existing_chapter
     new_chapter = bool(new_chapter_name)
 
-    # course_id is required in auto mode (we never guess)
+    # course_id is optional — omit it to create a brand-new course
     course_id_str = getattr(args, "course_id", None)
-    if not course_id_str:
-        print("Error: --auto requires --course-id <id>.", file=sys.stderr)
-        sys.exit(1)
-    course_id = int(course_id_str)
+    course_id = int(course_id_str) if course_id_str else None
 
-    # Derive course name from the course listing so the import page dropdown matches
+    # --course-name is required when creating a new course (no course_id)
     course_name = getattr(args, "course_name", None) or pgn_path.stem.replace("_curated", "").replace("_", " ")
+    if course_id is None and not getattr(args, "course_name", None):
+        print("Error: --course-name is required when creating a new course (no --course-id given).", file=sys.stderr)
+        sys.exit(1)
 
     stage3(
         pgn_path=pgn_path,
@@ -201,6 +202,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_import.add_argument("--auto", action="store_true", help="Playwright automation (default: manual/clipboard mode)")
     p_import.add_argument("--course-id", required=False, help="Chessable course ID (required for --auto)")
     p_import.add_argument("--course-name", required=False, help="Course display name as shown on Chessable (used for import dropdown)")
+    p_import.add_argument("--orientation", choices=["white", "black"], help="Piece color when creating a new course (white or black)")
     p_import.add_argument("--chapter", metavar="CHAPTER_NAME", help="Import into this existing chapter (default mode)")
     p_import.add_argument("--new-chapter", metavar="CHAPTER_NAME", dest="new_chapter", help="Create this chapter, then import into it")
 
