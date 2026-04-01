@@ -109,14 +109,22 @@ def cmd_import(args, config):
     chapter_name = new_chapter_name or existing_chapter
     new_chapter = bool(new_chapter_name)
 
-    # course_id is optional — omit it to create a brand-new course
+    # Course targeting: exactly one of --new-course or --course-id must be given
+    new_course   = getattr(args, "new_course", False)
     course_id_str = getattr(args, "course_id", None)
-    course_id = int(course_id_str) if course_id_str else None
 
-    # --course-name is required when creating a new course (no course_id)
+    if new_course and course_id_str:
+        print("Error: use --new-course OR --course-id, not both.", file=sys.stderr)
+        sys.exit(1)
+    if not new_course and not course_id_str:
+        print("Error: specify --new-course (create) or --course-id <id> (existing).", file=sys.stderr)
+        sys.exit(1)
+
+    course_id = None if new_course else int(course_id_str)
+
     course_name = getattr(args, "course_name", None) or pgn_path.stem.replace("_curated", "").replace("_", " ")
-    if course_id is None and not getattr(args, "course_name", None):
-        print("Error: --course-name is required when creating a new course (no --course-id given).", file=sys.stderr)
+    if new_course and not getattr(args, "course_name", None):
+        print("Error: --new-course requires --course-name <name>.", file=sys.stderr)
         sys.exit(1)
 
     stage3(
@@ -200,8 +208,9 @@ def build_parser() -> argparse.ArgumentParser:
     p_import = sub.add_parser("import", help="Stage 3: curated PGN → Chessable course")
     p_import.add_argument("--pgn", required=True, help="Curated PGN file to import")
     p_import.add_argument("--auto", action="store_true", help="Playwright automation (default: manual/clipboard mode)")
-    p_import.add_argument("--course-id", required=False, help="Chessable course ID (required for --auto)")
-    p_import.add_argument("--course-name", required=False, help="Course display name as shown on Chessable (used for import dropdown)")
+    p_import.add_argument("--new-course", action="store_true", dest="new_course", help="Create a brand-new Chessable course")
+    p_import.add_argument("--course-id", required=False, help="ID of an existing Chessable course (bid= from bookadmin URL)")
+    p_import.add_argument("--course-name", required=False, help="Course display name — required with --new-course; must match exactly with --course-id")
     p_import.add_argument("--orientation", choices=["white", "black"], help="Piece color when creating a new course (white or black)")
     p_import.add_argument("--chapter", metavar="CHAPTER_NAME", help="Import into this existing chapter (default mode)")
     p_import.add_argument("--new-chapter", metavar="CHAPTER_NAME", dest="new_chapter", help="Create this chapter, then import into it")

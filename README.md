@@ -91,7 +91,30 @@ These are set automatically when the study is created by this tool. If you creat
 
 Automates Chessable in a browser window (Playwright) to create chapters and import games.
 
-#### Import into an existing chapter (default)
+#### Create a new course + new chapter
+
+```bash
+uv run python main.py import \
+  --pgn output/my_games_curated.pgn \
+  --auto \
+  --new-course \
+  --course-name "White openings" \
+  --new-chapter "Italian Game" \
+  --orientation white
+```
+
+#### Add a new chapter to an existing course
+
+```bash
+uv run python main.py import \
+  --pgn output/my_games_curated.pgn \
+  --auto \
+  --course-id 419704 \
+  --course-name "Black openings" \
+  --new-chapter "Najdorf Variation"
+```
+
+#### Import into an existing chapter (append more games)
 
 ```bash
 uv run python main.py import \
@@ -103,17 +126,6 @@ uv run python main.py import \
 ```
 
 The chapter must already exist in the course.
-
-#### Create a new chapter and import
-
-```bash
-uv run python main.py import \
-  --pgn output/my_games_curated.pgn \
-  --auto \
-  --course-id 419704 \
-  --course-name "Black openings" \
-  --new-chapter "Sicilian Defense: Accelerated Dragon"
-```
 
 **Where to find your course ID:**
 Open the course control panel in Chessable. The URL will look like:
@@ -159,14 +171,19 @@ python main.py review [--pgn file.pgn] [--export-study STUDY_ID]
     Stage 2: PGN → Lichess study → curated PGN
 
 python main.py import --pgn file.pgn [--auto]
-                      [--course-id ID] [--course-name NAME]
-                      [--chapter CHAPTER_NAME | --new-chapter CHAPTER_NAME]
+                      [--new-course | --course-id ID]
+                      [--course-name NAME]
+                      [--new-chapter NAME | --chapter NAME]
+                      [--orientation white|black]
     Stage 3: curated PGN → Chessable
       --auto             Use browser automation (default: copy to clipboard + open browser)
-      --course-id        Chessable course ID (bid= from bookadmin URL)
-      --course-name      Course display name (must match exactly — used in import dropdown)
-      --chapter          Import into this existing chapter
+      --new-course       Create a brand-new course (requires --course-name)
+      --course-id        ID of an existing course (bid= from bookadmin URL)
+      --course-name      Course display name — required with --new-course;
+                         must match exactly what's shown on Chessable with --course-id
       --new-chapter      Create this chapter, then import into it
+      --chapter          Import into this already-existing chapter
+      --orientation      white or black — sets piece colour when creating a new course
 ```
 
 ---
