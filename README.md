@@ -176,7 +176,7 @@ python main.py import --pgn file.pgn [--auto]
                       [--new-chapter NAME | --chapter NAME]
                       [--orientation white|black]
     Stage 3: curated PGN → Chessable
-      --auto             Use browser automation (default: copy to clipboard + open browser)
+      --manual           Copy PGN to clipboard and open browser (default: Playwright automation)
       --new-course       Create a brand-new course (requires --course-name)
       --course-id        ID of an existing course (bid= from bookadmin URL)
       --course-name      Course display name — required with --new-course;

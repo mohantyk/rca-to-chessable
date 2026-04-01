@@ -87,7 +87,7 @@ def cmd_import(args, config):
     orientation = getattr(args, "orientation", None)
     piece_color = orientation.capitalize() if orientation else config.get("default_piece_color", "White")
     pgn_path = Path(args.pgn)
-    manual = not getattr(args, "auto", False)
+    manual = getattr(args, "manual", False)
 
     if manual:
         stage3(pgn_path=pgn_path, manual=True)
@@ -207,7 +207,7 @@ def build_parser() -> argparse.ArgumentParser:
     # import
     p_import = sub.add_parser("import", help="Stage 3: curated PGN → Chessable course")
     p_import.add_argument("--pgn", required=True, help="Curated PGN file to import")
-    p_import.add_argument("--auto", action="store_true", help="Playwright automation (default: manual/clipboard mode)")
+    p_import.add_argument("--manual", action="store_true", help="Copy PGN to clipboard and open browser manually (default: Playwright automation)")
     p_import.add_argument("--new-course", action="store_true", dest="new_course", help="Create a brand-new Chessable course")
     p_import.add_argument("--course-id", required=False, help="ID of an existing Chessable course (bid= from bookadmin URL)")
     p_import.add_argument("--course-name", required=False, help="Course display name — required with --new-course; must match exactly with --course-id")
