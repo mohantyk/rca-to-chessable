@@ -46,7 +46,8 @@ def cmd_fetch(args, config):
     """Stage 1: YouTube URL → PGN file."""
     from stages.stage1_pgn import run as stage1
     out_path = Path(args.output) if args.output else None
-    stage1(args.url, output_path=out_path)
+    pgn_path, title = stage1(args.url, output_path=out_path)
+    print(f"[fetch] Video title: {title}")
 
 
 def cmd_review(args, config):
@@ -114,24 +115,25 @@ def cmd_run(args, config):
     password = require_env("CHESSABLE_PASSWORD")
     piece_color = config.get("default_piece_color", "White")
 
-    # Stage 1
-    pgn_path = stage1(args.url)
+    # Stage 1 — returns (pgn_path, video_title)
+    pgn_path, video_title = stage1(args.url)
 
-    # Stage 2
-    study_name = pgn_path.stem.replace("_", " ")
+    # Stage 2 — user curates in Lichess, then this exports the curated PGN
     orientation = getattr(args, "orientation", None)
-    curated_path = stage2(token=token, pgn_path=pgn_path, study_name=study_name, orientation=orientation)
+    curated_path = stage2(token=token, pgn_path=pgn_path, study_name=video_title, orientation=orientation)
 
-    # Stage 3 — orientation → piece_color (white/black → White/Black)
+    # Stage 3 — one chapter per video, named after the video title
     if orientation:
         piece_color = orientation.capitalize()
-    course_name = pgn_path.stem.replace("_", " ")
+    course_name = config.get("course_name", video_title)
     stage3(
         email=email,
         password=password,
         pgn_path=curated_path,
         course_name=course_name,
+        chapter_name=video_title,   # ← video title becomes the chapter name
         piece_color=piece_color,
+        manual=False,
     )
 
 

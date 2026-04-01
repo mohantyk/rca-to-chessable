@@ -120,9 +120,10 @@ def interactive_gap_fill(pgn_text: str, errors: list[str]) -> str | None:
     return None
 
 
-def run(youtube_url: str, output_path: Path | None = None) -> Path:
+def run(youtube_url: str, output_path: Path | None = None) -> tuple[Path, str]:
     """
-    Full Stage 1 run.  Returns path to the output .pgn file.
+    Full Stage 1 run.
+    Returns (path_to_pgn_file, video_title).
     Raises SystemExit on unrecoverable failure.
     """
     OUTPUT_DIR.mkdir(exist_ok=True)
@@ -177,4 +178,4 @@ def run(youtube_url: str, output_path: Path | None = None) -> Path:
     pgn_out = games_to_pgn(all_games)
     output_path.write_text(pgn_out)
     print(f"\n[Stage 1] Done. {len(all_games)} game(s) written to {output_path}")
-    return output_path
+    return output_path, title

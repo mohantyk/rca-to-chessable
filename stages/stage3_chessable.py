@@ -202,14 +202,30 @@ def run_auto(
     password: str,
     pgn_path: Path,
     course_name: str = "YouTube Chess Course",
+    chapter_name: str | None = None,
     piece_color: str = "White",
     course_type: str = "Opening",
     course_id: int | None = None,
 ) -> None:
-    """Full Playwright automation — creates course, chapters, imports PGN."""
+    """Full Playwright automation — creates course, one chapter, imports all PGN games.
+
+    All games in pgn_path go into a single chapter.
+    chapter_name defaults to course_name if not provided.
+    """
     from playwright.sync_api import sync_playwright
 
     pgn_text = pgn_path.read_text()
+
+    # Collect all non-empty game blocks
+    raw_blocks = re.split(r'\n\n(?=\[Event)', pgn_text.strip())
+    game_blocks = [b.strip() for b in raw_blocks if b.strip()]
+
+    if not game_blocks:
+        print("[Stage 3] No games found in PGN — aborting.", file=sys.stderr)
+        return
+
+    chapter = _trim_name(chapter_name or course_name)
+    print(f"[Stage 3] {len(game_blocks)} game(s) → chapter '{chapter}'")
 
     with sync_playwright() as pw:
         browser = pw.chromium.launch(headless=False, slow_mo=200)
@@ -223,28 +239,10 @@ def run_auto(
         else:
             book_id = _create_course(page, course_name, piece_color, course_type)
 
-        # Group games by White player name → one chapter per unique name
-        chapters: dict[str, list[str]] = {}
-
-        # Split raw PGN into per-game strings
-        raw_blocks = re.split(r'\n\n(?=\[Event)', pgn_text.strip())
-        for block in raw_blocks:
-            block = block.strip()
-            if not block:
-                continue
-            white_match = re.search(r'\[White "([^"]+)"\]', block)
-            chapter_key = _trim_name(white_match.group(1) if white_match else "Lines")
-            chapters.setdefault(chapter_key, [])
-            chapters[chapter_key].append(block)
-
-        # Create all chapters first
-        for chapter_name in chapters:
-            _create_chapter(page, chapter_name, book_id)
-
-        # Then import each chapter's PGN
-        for chapter_name, game_blocks in chapters.items():
-            combined_pgn = "\n\n".join(game_blocks)
-            _import_pgn_chapter(page, combined_pgn, course_name, chapter_name)
+        # One chapter for all games in this video
+        _create_chapter(page, chapter, book_id)
+        combined_pgn = "\n\n".join(game_blocks)
+        _import_pgn_chapter(page, combined_pgn, course_name, chapter)
 
         print(f"\n[Stage 3] Done! Course ready to drill:")
         print(f"  https://www.chessable.com/course/{book_id}/")
@@ -261,6 +259,7 @@ def run(
     email: str = "",
     password: str = "",
     course_name: str = "YouTube Chess Course",
+    chapter_name: str | None = None,
     piece_color: str = "White",
     course_type: str = "Opening",
     course_id: int | None = None,
@@ -272,4 +271,4 @@ def run(
     if manual:
         run_manual(pgn_path)
     else:
-        run_auto(email, password, pgn_path, course_name, piece_color, course_type, course_id)
+        run_auto(email, password, pgn_path, course_name, chapter_name, piece_color, course_type, course_id)
