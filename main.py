@@ -86,22 +86,49 @@ def cmd_import(args, config):
     from stages.stage3_chessable import run as stage3
     piece_color = config.get("default_piece_color", "White")
     pgn_path = Path(args.pgn)
-    course_name = pgn_path.stem.replace("_curated", "").replace("_", " ")
     manual = not getattr(args, "auto", False)
 
     if manual:
         stage3(pgn_path=pgn_path, manual=True)
-    else:
-        email = require_env("CHESSABLE_EMAIL")
-        password = require_env("CHESSABLE_PASSWORD")
-        stage3(
-            pgn_path=pgn_path,
-            manual=False,
-            email=email,
-            password=password,
-            course_name=course_name,
-            piece_color=piece_color,
-        )
+        return
+
+    email = require_env("CHESSABLE_EMAIL")
+    password = require_env("CHESSABLE_PASSWORD")
+
+    # Chapter mode: --new-chapter <name> creates it; --chapter <name> uses existing
+    new_chapter_name = getattr(args, "new_chapter", None)
+    existing_chapter = getattr(args, "chapter", None)
+    if new_chapter_name and existing_chapter:
+        print("Error: use --chapter OR --new-chapter, not both.", file=sys.stderr)
+        sys.exit(1)
+    if not new_chapter_name and not existing_chapter:
+        print("Error: --auto requires either --chapter <name> or --new-chapter <name>.", file=sys.stderr)
+        sys.exit(1)
+
+    chapter_name = new_chapter_name or existing_chapter
+    new_chapter = bool(new_chapter_name)
+
+    # course_id is required in auto mode (we never guess)
+    course_id_str = getattr(args, "course_id", None)
+    if not course_id_str:
+        print("Error: --auto requires --course-id <id>.", file=sys.stderr)
+        sys.exit(1)
+    course_id = int(course_id_str)
+
+    # Derive course name from the course listing so the import page dropdown matches
+    course_name = getattr(args, "course_name", None) or pgn_path.stem.replace("_curated", "").replace("_", " ")
+
+    stage3(
+        pgn_path=pgn_path,
+        manual=False,
+        email=email,
+        password=password,
+        course_name=course_name,
+        chapter_name=chapter_name,
+        new_chapter=new_chapter,
+        piece_color=piece_color,
+        course_id=course_id,
+    )
 
 
 def cmd_run(args, config):
@@ -131,7 +158,8 @@ def cmd_run(args, config):
         password=password,
         pgn_path=curated_path,
         course_name=course_name,
-        chapter_name=video_title,   # ← video title becomes the chapter name
+        chapter_name=video_title,   # video title becomes the chapter name
+        new_chapter=True,           # full pipeline always creates a fresh chapter
         piece_color=piece_color,
         manual=False,
     )
@@ -170,8 +198,11 @@ def build_parser() -> argparse.ArgumentParser:
     # import
     p_import = sub.add_parser("import", help="Stage 3: curated PGN → Chessable course")
     p_import.add_argument("--pgn", required=True, help="Curated PGN file to import")
-    p_import.add_argument("--auto", action="store_true", help="Use Selenium automation (default: manual mode)")
-    p_import.add_argument("--course-id", help="Existing Chessable course ID to append to")
+    p_import.add_argument("--auto", action="store_true", help="Playwright automation (default: manual/clipboard mode)")
+    p_import.add_argument("--course-id", required=False, help="Chessable course ID (required for --auto)")
+    p_import.add_argument("--course-name", required=False, help="Course display name as shown on Chessable (used for import dropdown)")
+    p_import.add_argument("--chapter", metavar="CHAPTER_NAME", help="Import into this existing chapter (default mode)")
+    p_import.add_argument("--new-chapter", metavar="CHAPTER_NAME", dest="new_chapter", help="Create this chapter, then import into it")
 
     return parser
 

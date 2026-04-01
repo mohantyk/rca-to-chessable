@@ -262,14 +262,25 @@ def run_auto(
     pgn_path: Path,
     course_name: str = "YouTube Chess Course",
     chapter_name: str | None = None,
+    new_chapter: bool = False,
     piece_color: str = "White",
     course_type: str = "Opening",
     course_id: int | None = None,
 ) -> None:
-    """Full Playwright automation — creates course, one chapter, imports all PGN games.
+    """Full Playwright automation — imports all PGN games into one Chessable chapter.
 
-    All games in pgn_path go into a single chapter.
-    chapter_name defaults to course_name if not provided.
+    Default behaviour (new_chapter=False):
+      Imports directly into an existing chapter called chapter_name.
+      The chapter must already exist in the course.
+
+    With new_chapter=True:
+      Creates the chapter first, then imports. Use this when adding a video's
+      games to a course for the first time.
+
+    course_id: if given, skip course creation and use this existing course.
+               If None, a brand-new course named course_name is created.
+    chapter_name: name of the chapter to import into (existing or new).
+                  Defaults to course_name when not provided.
     """
     from playwright.sync_api import sync_playwright
 
@@ -284,7 +295,8 @@ def run_auto(
         return
 
     chapter = _trim_name(chapter_name or course_name)
-    print(f"[Stage 3] {len(game_blocks)} game(s) → chapter '{chapter}'")
+    action = "Creating chapter then importing" if new_chapter else "Importing into existing chapter"
+    print(f"[Stage 3] {len(game_blocks)} game(s) → '{chapter}'  ({action})")
 
     with sync_playwright() as pw:
         browser = pw.chromium.launch(headless=False, slow_mo=200)
@@ -298,8 +310,9 @@ def run_auto(
         else:
             book_id = _create_course(page, course_name, piece_color, course_type)
 
-        # One chapter for all games in this video
-        _create_chapter(page, chapter, book_id)
+        if new_chapter:
+            _create_chapter(page, chapter, book_id)
+
         combined_pgn = "\n\n".join(game_blocks)
         _import_pgn_chapter(page, combined_pgn, course_name, chapter)
 
@@ -319,6 +332,7 @@ def run(
     password: str = "",
     course_name: str = "YouTube Chess Course",
     chapter_name: str | None = None,
+    new_chapter: bool = False,
     piece_color: str = "White",
     course_type: str = "Opening",
     course_id: int | None = None,
@@ -330,4 +344,12 @@ def run(
     if manual:
         run_manual(pgn_path)
     else:
-        run_auto(email, password, pgn_path, course_name, chapter_name, piece_color, course_type, course_id)
+        run_auto(
+            email, password, pgn_path,
+            course_name=course_name,
+            chapter_name=chapter_name,
+            new_chapter=new_chapter,
+            piece_color=piece_color,
+            course_type=course_type,
+            course_id=course_id,
+        )
