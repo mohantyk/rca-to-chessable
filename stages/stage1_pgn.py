@@ -22,6 +22,10 @@ from utils.pgn_utils import extract_pgn_blocks, extract_pgn_from_scripts, valida
 OUTPUT_DIR = Path("output")
 _URL_RE = re.compile(r'https?://[^\s\)\]>\"\']+')
 
+# Domains known to host the actual PGN games for RCA/chess-teacher videos.
+# These are scraped first; other URLs are only tried if no games are found here.
+PRIMARY_DOMAINS = {"chess-teacher.com"}
+
 
 def fetch_video_info(youtube_url: str) -> dict:
     """Use yt-dlp to fetch the video title and description (no download)."""
@@ -138,30 +142,51 @@ def run(youtube_url: str, output_path: Path | None = None) -> tuple[Path, str]:
         output_path = OUTPUT_DIR / f"{safe_title}.pgn"
 
     # Find all external URLs in the description
-    urls = find_urls_in_text(description)
-    print(f"[Stage 1] Found {len(urls)} URL(s) in description.")
+    all_urls = find_urls_in_text(description)
+    print(f"[Stage 1] Found {len(all_urls)} URL(s) in description.")
 
-    all_games = []
-    for url in urls:
-        # Skip YouTube links and known non-PGN domains
+    # Partition into primary (chess-teacher.com) and fallback URLs
+    primary_urls  = []
+    fallback_urls = []
+    for url in all_urls:
         parsed = urlparse(url)
-        if "youtube" in parsed.netloc or "youtu.be" in parsed.netloc:
-            continue
+        netloc = parsed.netloc.lstrip("www.")
+        if "youtube" in netloc or "youtu.be" in netloc:
+            continue  # skip YouTube links entirely
+        if netloc in PRIMARY_DOMAINS:
+            primary_urls.append(url)
+        else:
+            fallback_urls.append(url)
 
-        pgn_blocks = scrape_pgn_from_url(url)
-        for raw_pgn in pgn_blocks:
-            games, errors = validate_pgn(raw_pgn)
-            if games:
-                print(f"    Found {len(games)} valid game(s) from {url}")
-                all_games.extend(games)
-            elif errors:
-                corrected = interactive_gap_fill(raw_pgn, errors)
-                if corrected:
-                    games2, errors2 = validate_pgn(corrected)
-                    if games2:
-                        all_games.extend(games2)
-                    else:
-                        print(f"    Still invalid after edit — skipping. Errors: {errors2}")
+    def _scrape_urls(urls: list[str]) -> list:
+        games_found = []
+        for url in urls:
+            pgn_blocks = scrape_pgn_from_url(url)
+            for raw_pgn in pgn_blocks:
+                games, errors = validate_pgn(raw_pgn)
+                if games:
+                    print(f"    Found {len(games)} valid game(s) from {url}")
+                    games_found.extend(games)
+                elif errors:
+                    corrected = interactive_gap_fill(raw_pgn, errors)
+                    if corrected:
+                        games2, errors2 = validate_pgn(corrected)
+                        if games2:
+                            games_found.extend(games2)
+                        else:
+                            print(f"    Still invalid after edit — skipping. Errors: {errors2}")
+        return games_found
+
+    # Pass 1: primary domains only (chess-teacher.com)
+    all_games = []
+    if primary_urls:
+        print(f"[Stage 1] Scraping {len(primary_urls)} primary URL(s) (chess-teacher.com)…")
+        all_games = _scrape_urls(primary_urls)
+
+    # Pass 2: fallback to other URLs only if primary yielded nothing
+    if not all_games and fallback_urls:
+        print(f"[Stage 1] No games from primary URLs — trying {len(fallback_urls)} fallback URL(s)…")
+        all_games = _scrape_urls(fallback_urls)
 
     # Drop games with no moves (empty chapters)
     all_games = [g for g in all_games if g.next() is not None]
