@@ -90,13 +90,13 @@ These are set automatically when the study is created by this tool. If you creat
 ### Stage 3 — Curated PGN → Chessable
 
 Automates Chessable in a browser window (Playwright) to create chapters and import games.
+Automation is the default — pass `--manual` to copy to clipboard and open the browser yourself instead.
 
 #### Create a new course + new chapter
 
 ```bash
 uv run python main.py import \
   --pgn output/my_games_curated.pgn \
-  --auto \
   --new-course \
   --course-name "White openings" \
   --new-chapter "Italian Game" \
@@ -108,7 +108,6 @@ uv run python main.py import \
 ```bash
 uv run python main.py import \
   --pgn output/my_games_curated.pgn \
-  --auto \
   --course-id 419704 \
   --course-name "Black openings" \
   --new-chapter "Najdorf Variation"
@@ -119,7 +118,6 @@ uv run python main.py import \
 ```bash
 uv run python main.py import \
   --pgn output/my_games_curated.pgn \
-  --auto \
   --course-id 419704 \
   --course-name "Black openings" \
   --chapter "Sicilian Defense: Accelerated Dragon"
@@ -148,7 +146,6 @@ uv run python main.py review --pgn output/<new_video_title>.pgn --orientation bl
 # 3. Import as a NEW chapter in the existing course
 uv run python main.py import \
   --pgn output/<new_video_title>_curated.pgn \
-  --auto \
   --course-id 419704 \
   --course-name "Black openings" \
   --new-chapter "<New Video Title>"
@@ -170,13 +167,13 @@ python main.py review [--pgn file.pgn] [--export-study STUDY_ID]
                       [-o output/file_curated.pgn]
     Stage 2: PGN → Lichess study → curated PGN
 
-python main.py import --pgn file.pgn [--auto]
+python main.py import --pgn file.pgn
                       [--new-course | --course-id ID]
                       [--course-name NAME]
                       [--new-chapter NAME | --chapter NAME]
                       [--orientation white|black]
-    Stage 3: curated PGN → Chessable
-      --manual           Copy PGN to clipboard and open browser (default: Playwright automation)
+                      [--manual]
+    Stage 3: curated PGN → Chessable (automation is the default)
       --new-course       Create a brand-new course (requires --course-name)
       --course-id        ID of an existing course (bid= from bookadmin URL)
       --course-name      Course display name — required with --new-course;
@@ -184,6 +181,7 @@ python main.py import --pgn file.pgn [--auto]
       --new-chapter      Create this chapter, then import into it
       --chapter          Import into this already-existing chapter
       --orientation      white or black — sets piece colour when creating a new course
+      --manual           Copy PGN to clipboard and open browser instead of automating
 ```
 
 ---
@@ -193,15 +191,15 @@ python main.py import --pgn file.pgn [--auto]
 | Variable | Required | Description |
 |---|---|---|
 | `LICHESS_TOKEN` | Stage 2 | OAuth token with Study read/write scope |
-| `CHESSABLE_EMAIL` | Stage 3 auto | Login email for Chessable |
-| `CHESSABLE_PASSWORD` | Stage 3 auto | Login password for Chessable |
+| `CHESSABLE_EMAIL` | Stage 3 | Login email for Chessable |
+| `CHESSABLE_PASSWORD` | Stage 3 | Login password for Chessable |
 
 ---
 
 ## Project Structure
 
 ```
-youtube-chessable/
+rca-to-chessable/
 ├── main.py                  # CLI entry point
 ├── stages/
 │   ├── stage1_pgn.py        # YouTube → PGN
@@ -209,12 +207,9 @@ youtube-chessable/
 │   └── stage3_chessable.py  # Curated PGN → Chessable (Playwright)
 ├── utils/
 │   └── pgn_utils.py         # PGN parsing, validation, annotation mapping
-├── output/                  # Generated PGN files
-├── docs/
-│   └── chessable_page_map.md  # Chessable page structure notes (for future API)
-├── test_stage3.py           # Quick test script for Stage 3
+├── output/                  # Generated PGN files (gitignored)
 ├── config.yaml              # Default settings
-└── .env                     # Secrets (not committed)
+└── .env                     # Secrets (gitignored — use .env.example as template)
 ```
 
 ---
