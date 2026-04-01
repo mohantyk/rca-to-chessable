@@ -58,7 +58,14 @@ def _get_mt1_frame(page):
 
 
 def _create_course(page, course_name: str, piece_color: str, course_type: str) -> int:
-    """Create a new course and return its book_id."""
+    """Create a new course and return its book_id.
+
+    After form submission, Chessable redirects the mt1 frame (and often the main
+    page) to bookadmin.php?bid=<NEW_ID>.  We extract the ID from those URLs rather
+    than doing a fuzzy search that can match other users' public courses.
+    """
+    import re as _re, time
+
     print(f"[Stage 3] Creating course '{course_name}'…")
     page.goto("https://www.chessable.com/newcourse/")
     page.wait_for_load_state("networkidle")
@@ -71,60 +78,112 @@ def _create_course(page, course_name: str, piece_color: str, course_type: str) -
     frame.select_option("select[name=color]", label=piece_color)
     frame.click("input[type=submit]")
 
-    # Wait for confirmation — Chessable shows a success banner in the page body
-    import time
-    time.sleep(2)
-    try:
-        # Try the frame success indicator first
-        frame.wait_for_selector(".isa_success", timeout=8000)
-        print(f"[Stage 3] Course created.")
-    except Exception:
-        # Fall back: wait until the page body contains the confirmation text
-        try:
-            page.wait_for_function(
-                "() => document.body.innerText.includes('was added')",
-                timeout=15000,
-            )
-            print(f"[Stage 3] Course created.")
-        except Exception:
-            page.wait_for_load_state("networkidle")
-            print(f"[Stage 3] Course submitted (assuming success).")
+    # Wait for any redirect that carries the new book ID in a URL
+    # Chessable redirects the mt1 frame (and sometimes the main page) to
+    # something like /bookadmin.php?bid=<ID> or /course/<ID>/ after creation.
+    time.sleep(3)
 
-    # Get the book ID from the current URL in the mt1 frame
-    book_id = _get_book_id(page, course_name)
-    return book_id
+    def _extract_id_from_frames():
+        for f in page.frames:
+            for pattern in [r'bid=(\d+)', r'/course/(\d+)/', r'book_id=(\d+)']:
+                m = _re.search(pattern, f.url)
+                if m:
+                    return int(m.group(1))
+        # Also check main page URL
+        for pattern in [r'bid=(\d+)', r'/course/(\d+)/', r'book_id=(\d+)']:
+            m = _re.search(pattern, page.url)
+            if m:
+                return int(m.group(1))
+        return None
+
+    # Poll for up to 20 s for a redirect that contains the book ID
+    book_id = None
+    for _ in range(20):
+        book_id = _extract_id_from_frames()
+        if book_id:
+            break
+        time.sleep(1)
+
+    if book_id:
+        print(f"[Stage 3] Course created. ID: {book_id}")
+        return book_id
+
+    # Fallback: look for success text then try the courses page with exact-name filter
+    try:
+        frame.wait_for_selector(".isa_success", timeout=5000)
+    except Exception:
+        pass
+    print(f"[Stage 3] Course created (searching for ID).")
+    return _get_book_id_exact(page, course_name)
 
 
 def _get_book_id(page, course_name: str) -> int:
+    """Legacy helper — kept for reference. Prefer _get_book_id_exact."""
+    return _get_book_id_exact(page, course_name)
+
+
+def _get_book_id_exact(page, course_name: str) -> int:
     """
-    Look up the course ID by searching the created courses page.
-    Extracts ID from URL pattern: /slug/course/{id}/
-    Works in the main frame — no mt1 iframe needed here.
+    Find our own course ID by navigating to the creator's course list and
+    matching the title EXACTLY — avoids accidentally picking a public course
+    from another user with the same name.
     """
     from urllib.parse import quote_plus
     import re as _re
+
     page.goto(f"https://www.chessable.com/courses/all/created/?search={quote_plus(course_name)}")
     page.wait_for_load_state("networkidle")
 
-    # Search all frames for a course link
+    # Collect all course cards visible on the page
     for frame in page.frames:
-        links = frame.query_selector_all("a[href*='/course/']")
-        for link in links:
-            href = link.get_attribute("href") or ""
+        cards = frame.query_selector_all("a[href*='/course/']")
+        for card in cards:
+            href = card.get_attribute("href") or ""
             match = _re.search(r'/course/(\d+)/', href)
-            if match:
+            if not match:
+                continue
+            # Only accept if the link's text contains our exact course name
+            card_text = (card.inner_text() or "").strip()
+            if course_name.lower() in card_text.lower():
                 book_id = int(match.group(1))
                 print(f"[Stage 3] Course ID: {book_id}")
                 return book_id
 
-    raise RuntimeError(f"Could not find course '{course_name}' — check that it was created.")
+    raise RuntimeError(
+        f"Could not find course '{course_name}' in your created courses list.\n"
+        "  Check https://www.chessable.com/courses/all/created/ to verify it exists."
+    )
 
 
 def _create_chapter(page, chapter_name: str, book_id: int) -> None:
-    """Create a chapter — bookadmin.php is in the main frame, no iframe needed."""
+    """Create a chapter — bookadmin.php is in the main frame, no iframe needed.
+
+    Uses bit=3 (New Chapter tab). If the input isn't immediately visible
+    (e.g. new course lands on a different default tab), clicks the sidebar link by href.
+    """
     page.goto(f"https://www.chessable.com/bookadmin.php?bid={book_id}&a=edit&bit=3")
     page.wait_for_load_state("networkidle")
-    page.wait_for_selector("input[name=title]")
+
+    # Save debug screenshot in case of failure
+    from pathlib import Path as _Path
+    debug_ss = _Path("output/debug_bookadmin.png")
+
+    # If the "New Chapter" input isn't visible, find the sidebar link by href pattern
+    try:
+        page.wait_for_selector("input[name=title]", timeout=8000)
+    except Exception:
+        debug_ss.parent.mkdir(exist_ok=True)
+        page.screenshot(path=str(debug_ss))
+        print(f"[Stage 3] DEBUG screenshot → {debug_ss}")
+        # Try clicking the sidebar link by its href (bit=3 or containing 'bit=3')
+        try:
+            page.click(f"a[href*='bit=3']", timeout=5000)
+        except Exception:
+            # Try by partial text match (the + sign may be a different char)
+            page.click("a:text-matches('New Chapter', 'i')", timeout=5000)
+        page.wait_for_load_state("networkidle")
+        page.wait_for_selector("input[name=title]", timeout=15000)
+
     page.fill("input[name=title]", chapter_name[:55])  # 55 char max per UI hint
     page.click("input[type=submit][value='Add Chapter'], button:has-text('Add Chapter')")
     page.wait_for_load_state("networkidle")
