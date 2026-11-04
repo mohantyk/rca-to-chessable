@@ -8,5 +8,4 @@ dist/
 .DS_Store
 test_stage3.py
 PRD_YouTube_to_Chessable.md
-docs/
 vendor/
